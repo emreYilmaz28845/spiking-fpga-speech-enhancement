@@ -1,2 +1,6 @@
 __pycache__/
 Trained/
+output
+outputBackup
+outputBackup2
+AudioMNIST
