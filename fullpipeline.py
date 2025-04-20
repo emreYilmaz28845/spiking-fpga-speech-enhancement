@@ -17,7 +17,7 @@ data_root = "C:/VSProjects/spiking-fpga-project/audio"
 dataset = SpikeSpeechEnhancementDataset(
     noisy_dir=os.path.join(data_root, "noisy"),
     clean_dir=os.path.join(data_root, "clean"),
-    delta_threshold=0.0005
+    delta_threshold=0.003
 )
 
 train_size = int(0.9 * len(dataset))
@@ -65,6 +65,14 @@ with torch.no_grad():
     _, mem_out = list(snn.mem_rec.items())[-1]
     mem_out = mem_out.permute(1, 0, 2)  # [B, T, F]
 
+
+print("Output range:", mem_out.min().item(), mem_out.max().item())
+print("Target range:", target.min().item(), target.max().item())
+
+# Normalize membrane output if needed
+mem_out = (mem_out - mem_out.mean()) / (mem_out.std() + 1e-6)
+
+
 # Plot one sample
 predicted = mem_out[0].cpu().T
 ground_truth = target[0].cpu().T
@@ -78,3 +86,4 @@ plt.imshow(ground_truth, aspect='auto', origin='lower')
 plt.title("Target Clean Log-Mel")
 plt.tight_layout()
 plt.show()
+

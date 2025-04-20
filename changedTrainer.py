@@ -4,14 +4,66 @@ import time
 import logging
 import torch
 import torch.nn as nn
+import torchaudio.transforms as T
 
 logging.basicConfig(level=logging.DEBUG)
+
+
+class HybridMelLoss(nn.Module):
+    def __init__(self, sample_rate=16000, n_fft=512, hop_length=128, n_mels=40, alpha=0.7):
+        super().__init__()
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels
+        )
+        self.mse = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+        self.alpha = alpha  # weight for MSE vs STFT loss
+
+    def forward(self, predicted, target):
+        # predicted, target: [B, T, F]
+        predicted = predicted.permute(0, 2, 1)  # [B, F, T]
+        target = target.permute(0, 2, 1)
+
+        mel_pred = self.mel_transform(predicted)
+        mel_target = self.mel_transform(target)
+
+        loss_stft = self.l1(mel_pred, mel_target)
+        loss_mse = self.mse(predicted, target)
+
+        return self.alpha * loss_mse + (1 - self.alpha) * loss_stft
+    
+
+def tap_loss(pred, target):
+    """
+    pred, target: [B, T, F]
+    TAP-style loss includes MSE + delta + energy terms
+    """
+    mse_term = torch.mean((pred - target) ** 2)
+
+    # Temporal delta (1st order difference)
+    delta_pred = pred[:, 1:, :] - pred[:, :-1, :]
+    delta_target = target[:, 1:, :] - target[:, :-1, :]
+    delta_term = torch.mean((delta_pred - delta_target) ** 2)
+
+    # Global energy (mean power)
+    energy_pred = torch.mean(pred, dim=(1, 2))
+    energy_target = torch.mean(target, dim=(1, 2))
+    energy_term = torch.mean((energy_pred - energy_target) ** 2)
+
+    return mse_term + 0.5 * delta_term + 0.2 * energy_term
+
 
 class Trainer:
     def __init__(self, net, optimizer=None, loss_fn=None):
         self.net = net
 
-        self.loss_fn = loss_fn if loss_fn else nn.MSELoss()
+        #self.loss_fn = loss_fn if loss_fn else nn.MSELoss()
+        #self.loss_fn = loss_fn if loss_fn else HybridMelLoss()
+        #self.loss_fn = loss_fn if loss_fn else nn.SmoothL1Loss()
+        self.loss_fn = loss_fn if loss_fn else tap_loss
 
         if not optimizer:
             self.optimizer = torch.optim.Adam(self.net.parameters(), lr=5e-4, betas=(0.9, 0.999))
