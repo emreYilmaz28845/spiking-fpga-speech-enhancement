@@ -1,11 +1,10 @@
+#trainer.py
 import os
 import time
 import logging
 import torch
 import torch.nn as nn
 
-
-#change the trainer in the env
 logging.basicConfig(level=logging.DEBUG)
 
 class Trainer:
@@ -21,6 +20,7 @@ class Trainer:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.net.to(self.device)
+        self.batch_losses = []
 
         logging.info("Initialized EnhancementTrainer")
         logging.info(f"Loss function: {self.loss_fn}")
@@ -44,12 +44,16 @@ class Trainer:
 
         if store:
             self.store(output_dir)
+        
 
     def train_one_epoch(self, dataloader):
         total_loss = 0
 
         for batch_idx, (data, targets) in enumerate(dataloader):
             logging.debug(f"Batch {batch_idx}: Input shape {data.shape}, Target shape {targets.shape}")
+            print("[DEBUG] Input spikes (first batch):", data.mean().item(), data.std().item())
+            print("[DEBUG] Targets (first batch):", targets.mean().item(), targets.std().item())            
+            
             data = data.permute(1, 0, 2).to(self.device)  # [T, B, F]
             targets = targets.to(self.device)  # [B, T, F]
 
@@ -66,6 +70,7 @@ class Trainer:
 
             logging.debug(f"Batch {batch_idx}: Loss = {loss_val.item():.4f}")
             total_loss += loss_val.item()
+            self.batch_losses.append(loss_val)
 
         avg_loss = total_loss / (batch_idx + 1)
         logging.info(f"Training epoch done. Avg loss = {avg_loss:.4f}")

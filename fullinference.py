@@ -6,17 +6,19 @@ import matplotlib.pyplot as plt
 from spikerplus import NetBuilder
 
 # === 1. Configuration ===
-sample_path = "audio/noisy/011.wav"  # Replace with a valid file
+sample_path = "audio/noisy/001.wav"  # Replace with a valid file
 model_path = "trained_models/trained_state_dict.pt"
 sr = 16000
 n_mels = 40
 n_fft = 512
 hop_length = 128
 T_fixed = 1500  # Number of time steps used during training
+threshold = 0.003  # Delta threshold (must match training)
 
+# === 2. Device ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# === 2. Define SNN model ===
+# === 3. Define SNN model ===
 net_dict = {
     "n_cycles": T_fixed,
     "n_inputs": n_mels,
@@ -24,74 +26,102 @@ net_dict = {
         "neuron_model": "lif",
         "n_neurons": 128,
         "beta": 0.9375,
-        "threshold": 1.0,
+        "threshold": 0.1,
         "reset_mechanism": "subtract"
     },
     "layer_1": {
         "neuron_model": "lif",
+        "n_neurons": 128,
+        "beta": 0.9375,
+        "threshold": 0.1,
+        "reset_mechanism": "subtract"
+    },
+    "layer_2": {
+        "neuron_model": "lif",
         "n_neurons": 40,
         "beta": 0.9375,
-        "threshold": 1.0,
+        "threshold": 0.1,
         "reset_mechanism": "none"
     }
 }
 
-snn = NetBuilder(net_dict).build()
+
+snn = NetBuilder(net_dict).build(record_spikes=True, record_mem=True)
+
 snn.load_state_dict(torch.load(model_path, map_location=device))
 snn.to(device)
 snn.eval()
 
-# === 3. Preprocess input waveform ===
-waveform, sr = torchaudio.load(sample_path)
+# === 4. Preprocess input waveform ===
+wav, sr = torchaudio.load(sample_path)
 mel_transform = T.MelSpectrogram(sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)
-mel = mel_transform(waveform).squeeze(0)  # [n_mels, T_orig]
+mel = mel_transform(wav).squeeze(0)  # [n_mels, T]
 
-# === 4. Rate coding ===
-# Power-law compression + min-max normalization
-mel = torch.pow(mel + 1e-6, 0.3)
-mel = (mel - mel.min()) / (mel.max() - mel.min())
+# === 5. Delta Encoding (Same as training) ===
+log_mel = torch.log(mel + 1e-6)
+print(mel.min(), mel.max())
+log_mel = (log_mel - log_mel.min()) / (log_mel.max() - log_mel.min())
+log_mel_interp = torch.nn.functional.interpolate(log_mel.unsqueeze(0), size=T_fixed, mode="linear", align_corners=False).squeeze(0).T
 
-# Interpolate to fixed T and transpose
-mel_interp = torch.nn.functional.interpolate(mel.unsqueeze(0), size=T_fixed, mode="linear", align_corners=False).squeeze(0)
-spike_input = torch.bernoulli(mel_interp.T).unsqueeze(1).to(device)  # [T, 1, n_mels]
+input_spikes = torch.zeros_like(log_mel_interp)
+prev = torch.zeros(log_mel_interp.shape[1])
+for t in range(log_mel_interp.shape[0]):
+    diff = log_mel_interp[t] - prev
+    input_spikes[t] = (diff.abs() > threshold).float() * diff
+    prev = log_mel_interp[t]
 
-# === 5. Inference ===
-with torch.no_grad():
-    snn(spike_input)
-    _, mem_out = list(snn.mem_rec.items())[-1]  # [T, 1, 40]
-    enhanced_mel = mem_out.squeeze(1).cpu().T  # [40, T]
+reconstructed_input = input_spikes.cumsum(dim=0)
 
-# === 6. Reconstruct waveform ===
-inv_mel = T.InverseMelScale(n_stft=257, n_mels=40, sample_rate=sr)(enhanced_mel.unsqueeze(0))
-waveform_out = T.GriffinLim(n_fft=n_fft, hop_length=hop_length)(inv_mel)
-print("waveform_out shape:", waveform_out.shape)
+spike_input = input_spikes.unsqueeze(1).to(device)  # [T, 1, F]
 
-torchaudio.save("audio/enhanced/enhanced.wav", waveform_out, sr)
-torchaudio.save("audio/enhanced/noisy.wav", waveform, sr)
-
-
-
-
-# === Plot original (noisy) and enhanced mel spectrograms ===
-# === Plot original (noisy) and enhanced mel spectrograms ===
-fig, axs = plt.subplots(1, 2, figsize=(12, 4), sharey=True)
-
-# Noisy Mel Spectrogram
-img0 = axs[0].imshow(mel.T.cpu(), aspect='auto', origin='lower')
-axs[0].set_title("Noisy Mel Spectrogram")
-axs[0].set_xlabel("Time")
-axs[0].set_ylabel("Mel bins")
-cbar0 = plt.colorbar(img0, ax=axs[0], orientation="vertical")
-cbar0.set_label("Amplitude (normalized)")
-
-# Enhanced Mel Spectrogram
-img1 = axs[1].imshow(enhanced_mel, aspect='auto', origin='lower')
-axs[1].set_title("Enhanced Mel Spectrogram")
-axs[1].set_xlabel("Time")
-cbar1 = plt.colorbar(img1, ax=axs[1], orientation="vertical")
-cbar1.set_label("Amplitude (membrane potential)")
-
-plt.tight_layout()
+print("Input spikes stats:", input_spikes.abs().mean(), input_spikes.abs().max())
+plt.hist(input_spikes.flatten().numpy(), bins=100)
+plt.title("Input Spike Value Distribution")
 plt.show()
 
 
+# === 6. Inference ===
+with torch.no_grad():
+    # Run inference
+    snn(spike_input)
+
+    # === Inspect internal activity ===
+    print("Layer 0 spike max:", snn.spk_rec['lif1'].max())
+    print("Layer 1 spike max:", snn.spk_rec['lif2'].max())
+
+    # === Final output membrane potential ===
+    _, mem_out = list(snn.mem_rec.items())[-1]  # [T, 1, 40]
+    output_spikes = mem_out.squeeze(1).cpu()    # [T, 40]
+
+    print("Output spikes max:", output_spikes.abs().max())
+
+    # === Reconstruct log-mel from output ===
+    reconstructed_output = output_spikes.cumsum(dim=0).T  # [40, T]
+
+
+# === 7. Visualization ===
+fig, axs = plt.subplots(1, 5, figsize=(24, 5), sharey=True)
+
+axs[0].imshow(log_mel.cpu(), aspect='auto', origin='lower')
+axs[0].set_title("Input Normalized Log-Mel")
+axs[0].set_xlabel("Time")
+axs[0].set_ylabel("Mel Bin")
+
+axs[1].imshow(input_spikes.abs().T, aspect='auto', origin='lower')
+axs[1].set_title("Input Spike Magnitude |Δ|")
+axs[1].set_xlabel("Time")
+
+axs[2].imshow(reconstructed_input.T, aspect='auto', origin='lower')
+axs[2].set_title("Input Spike ∑Δ (Reconstructed)")
+axs[2].set_xlabel("Time")
+
+axs[3].imshow(output_spikes.abs().T, aspect='auto', origin='lower')
+axs[3].set_title("Output Spike Magnitude |Δ|")
+axs[3].set_xlabel("Time")
+
+axs[4].imshow(reconstructed_output, aspect='auto', origin='lower')
+axs[4].set_title("Output Spike ∑Δ (Reconstructed)")
+axs[4].set_xlabel("Time")
+
+plt.tight_layout()
+plt.show()
