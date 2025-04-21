@@ -1,45 +1,58 @@
-import os
 import torch
+import torchaudio
+import torchaudio.transforms as T
 import matplotlib.pyplot as plt
-from encode import SpikeSpeechEnhancementDataset  # Adjust to your filename
+from encode import spike_encode  # Your custom encoder
 
-# === Init dataset ===
-data_root = "C:/VSProjects/spiking-fpga-project/audio"
-noisy_dir = os.path.join(data_root, "noisy")
-clean_dir = os.path.join(data_root, "clean")
+# === Config ===
+wav_path = "audio/noisy/379.wav"  # 👈 set your test file here
+sample_rate = 16000
+n_mels = 40
+n_fft = 512
+hop_length = 128
+max_len = 1500
+threshold = 0.003
 
-dataset = SpikeSpeechEnhancementDataset(
-    noisy_dir=noisy_dir,
-    clean_dir=clean_dir,
-    delta_threshold=0.003  # threshold for spike sparsity
+# === 1. Load audio
+wave, sr = torchaudio.load(wav_path)
+if sr != sample_rate:
+    wave = torchaudio.transforms.Resample(sr, sample_rate)(wave)
+
+# === 2. Mel-spectrogram
+mel_transform = T.MelSpectrogram(sample_rate=sample_rate, n_fft=n_fft,
+                                 hop_length=hop_length, n_mels=n_mels)
+mel = mel_transform(wave).squeeze(0)  # [n_mels, T]
+
+# === 3. Encode
+spikes, normed_logmel = spike_encode(
+    mel_tensor=mel,
+    max_len=max_len,
+    threshold=threshold,
+    normalize=True
 )
 
-# === Pick one sample ===
-spikes, clean, normed_logmel = dataset[0]  # spikes: [T, n_mels], clean: [T, n_mels], logmel: [T, n_mels]
-
-# === Reconstruct log-mel from spikes (simulates Sigma neuron) ===
+# === 4. Reconstruct from spikes
 reconstructed = spikes.cumsum(dim=0)
 
-# === Plot original and encoded representations ===
-fig, axs = plt.subplots(1, 3, figsize=(22, 5), sharey=True)
+# === 5. Plot
+fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
 
-# 0. Original normalized log-mel
-axs[0].imshow(normed_logmel.T, aspect='auto', origin='lower', interpolation='nearest')
-axs[0].set_title("Original Log-Mel (normalized)")
+axs[0].imshow(normed_logmel.T.numpy(), aspect='auto', origin='lower')
+axs[0].set_title("Normalized Log-Mel")
 
-# 1. Spike Magnitude Spectrogram
-axs[1].imshow(spikes.abs().T, aspect='auto', origin='lower', interpolation='nearest')
+axs[1].imshow(spikes.abs().T.numpy(), aspect='auto', origin='lower')
 axs[1].set_title("Spike Magnitude (|delta|)")
 
-# 2. Reconstructed Log-Mel
-axs[2].imshow(reconstructed.T, aspect='auto', origin='lower', interpolation='nearest')
+axs[2].imshow(reconstructed.T.numpy(), aspect='auto', origin='lower')
 axs[2].set_title("Reconstructed Log-Mel (∑spikes)")
 
-
-# === Axis labels ===
 for ax in axs:
-    ax.set_xlabel("Time Step")
+    ax.set_xlabel("Time")
     ax.set_ylabel("Mel Bin")
 
 plt.tight_layout()
 plt.show()
+
+# === 6. Optional MSE print
+mse = torch.mean((normed_logmel - reconstructed) ** 2).item()
+print(f"[INFO] MSE between original and reconstructed: {mse:.6f}")

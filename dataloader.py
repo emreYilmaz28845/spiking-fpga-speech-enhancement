@@ -8,7 +8,7 @@ import os
 # === 1. Dataset ===
 class SpikeSpeechEnhancementDataset(Dataset):
     def __init__(self, noisy_dir, clean_dir, sample_rate=16000, n_fft=512, hop_length=128,
-                 n_mels=40, max_len=1500, delta_threshold=0.0005):
+                 n_mels=40, max_len=1500, delta_threshold=0.003):
         self.noisy_paths = sorted([os.path.join(noisy_dir, f) for f in os.listdir(noisy_dir) if f.endswith('.wav')])
         self.clean_paths = sorted([os.path.join(clean_dir, f) for f in os.listdir(clean_dir) if f.endswith('.wav')])
         self.mel_transform = T.MelSpectrogram(sample_rate=sample_rate, n_fft=n_fft,
