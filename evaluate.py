@@ -7,7 +7,7 @@ from models.builder import build_network
 from data.dataloader import get_dataloaders
 from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
-path = "Trained/2025-07-04_16-15_delta_e1_len700/trained_state_dict.pt"
+path = "Trained/2025-07-04_19-09_delta_e3_len700/trained_state_dict.pt"
 # Model yükle
 snn = build_network(cfg)
 latest_ckpt_folder = sorted(os.listdir("trained"))[-1]

@@ -24,12 +24,12 @@ def reconstruct_without_stretch(
     logstft_tensor: torch.Tensor,
     log_min: float,
     log_max: float,
-    filename: str,
+    filename: str = None,  # Optional
     n_fft: int = 1024,
     hop_length: int = 256,
     sample_rate: int = 16000,
     n_iter: int = 32,
-    original_length: int = None  # Accept original_length in samples
+    original_length: int = None
 ):
     # Denormalize
     denorm = logstft_tensor * (log_max - log_min) + log_min
@@ -38,13 +38,17 @@ def reconstruct_without_stretch(
     waveform = logstft_to_waveform(
         denorm, n_fft=n_fft, hop_length=hop_length,
         sample_rate=sample_rate, n_iter=n_iter
-    ).squeeze(0).cpu().numpy()  # [T]
+    ).squeeze(0).cpu()
 
-    # Trim to original number of samples (in waveform domain)
+    # Trim
     if original_length is not None and original_length > 0:
         waveform = waveform[:original_length]
 
-    # Save
-    sf.write(filename, waveform, samplerate=sample_rate)
+    # Optional save
+    if filename is not None:
+        import soundfile as sf
+        sf.write(filename, waveform.numpy(), samplerate=sample_rate)
+
     return waveform
+
 

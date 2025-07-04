@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class SpikePositionLossDelta(nn.Module):
     def __init__(
         self,
@@ -81,3 +82,88 @@ class SpikePositionLossDelta(nn.Module):
         self.last_coverage = coverage_value
 
         return self.lambda_pos * pos_loss + self.lambda_vr * vr_loss + coverage_penalty
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from utils.encode import reconstruct_from_spikes
+#SPİKİNG FULLSUBNETİN LOSSUNU KOPYALA
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from utils.encode import reconstruct_from_spikes
+from utils.audio_utils import reconstruct_without_stretch
+from utils.config import cfg
+
+class DeltaReconstructionLoss(nn.Module):
+    def __init__(self, alpha=0.5, gamma_tf=1.0, gamma_sisdr=0.001, reduction="mean",cfg=None):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma_tf = gamma_tf
+        self.gamma_sisdr = gamma_sisdr
+        self.reduction = reduction
+        self.cfg = cfg 
+
+    def forward(self, pred_spikes, target_spikes, mask=None,log_min=None, log_max=None):
+        """
+        pred_spikes: [B, T, F] - predicted delta spikes
+        target_stft: [B, T, F] - ground truth log-magnitude STFT
+        original_length: optional [B] - needed for waveform trim
+        """
+        # T_real = int(mask[0].sum().item())
+        # trimmed_spike_out = spike_out[0][:T_real]
+        # trimmed_target_spikes = target_spikes[0][:T_real]
+
+        T_real = int(mask[0].sum().item())
+        trimmed_spike_out = pred_spikes[0][:T_real]
+        trimmed_target_spikes = target_spikes[0][:T_real]
+
+        pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode='delta', trim=True)
+        target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode='delta', trim=True)
+
+
+        # 🎯 2. Time-Frequency Domain Loss (Magnitude Only)
+        tf_loss = F.mse_loss(pred_reconstructed, target_reconstructed, reduction=self.reduction)
+
+        log_min_val = log_min[0].item()
+        log_max_val = log_max[0].item()
+
+        pred_stft_vis = pred_reconstructed.detach().cpu().T
+        target_stft_vis = target_reconstructed.detach().cpu().T
+
+
+        # pred_wave = reconstruct_without_stretch(pred_stft_vis, log_min_val, log_max_val,
+        #                     n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+        
+        # target_wave = reconstruct_without_stretch(target_stft_vis, log_min_val, log_max_val,
+        #                     n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+
+
+        # 📏 4. SI-SDR loss
+        def si_sdr(s_hat, s, eps=1e-8):
+            s = s - s.mean(dim=-1, keepdim=True)
+            s_hat = s_hat - s_hat.mean(dim=-1, keepdim=True)
+
+            s_energy = torch.sum(s ** 2, dim=-1, keepdim=True) + eps
+            projection = torch.sum(s_hat * s, dim=-1, keepdim=True) * s / s_energy
+            e_noise = s_hat - projection
+
+            s_target_norm = torch.norm(projection, dim=-1) + eps
+            e_noise_norm = torch.norm(e_noise, dim=-1) + eps
+
+            ratio = s_target_norm / e_noise_norm
+            ratio = torch.clamp(ratio, min=eps)  # NaN koruması
+
+            return 10 * torch.log10(ratio)
+
+
+
+        #si_sdr_vals = si_sdr(pred_wave, target_wave)
+        #sisdr_loss = 100 - si_sdr_vals.mean()
+        sisdr_loss= 0
+
+        # 🔀 Combine
+        total_loss = self.gamma_tf * tf_loss + self.gamma_sisdr * sisdr_loss
+        return total_loss
+
