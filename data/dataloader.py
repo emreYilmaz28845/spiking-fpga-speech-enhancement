@@ -26,10 +26,8 @@ def get_dataloaders(cfg, shuffle=True):
         train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
     
     if shuffle:
-        # Rastgele böl → eğitim sırasında kullanılır
         train_set, val_set = torch.utils.data.random_split(dataset, [train_size, val_size])
-    else:
-        # Sabit böl → inference & karşılaştırma için
+    else:  
         train_set = Subset(dataset, range(0, train_size))
         val_set = Subset(dataset, range(train_size, train_size + val_size))
     

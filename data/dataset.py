@@ -7,7 +7,7 @@ import os
 
 class SpikeSpeechEnhancementDataset(Dataset):
     def __init__(self, noisy_dir, clean_dir, sample_rate=16000, n_fft=1024, hop_length=256,
-                 max_len=1500, threshold=0.02, mode="phased_rate",normalize=True,padding=True):
+                 max_len=1500, threshold=0.02, mode="delta",normalize=True,padding=True):
         
         self.noisy_paths = sorted([os.path.join(noisy_dir, f) for f in os.listdir(noisy_dir) if f.endswith('.wav')])
         self.clean_paths = sorted([os.path.join(clean_dir, f) for f in os.listdir(clean_dir) if f.endswith('.wav')])

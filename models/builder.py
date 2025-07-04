@@ -74,6 +74,44 @@ def get_network_dict(cfg):
                 "reset_mechanism": "zero", "bias": False
             }
         }
+    elif model_type == "homebrew-delta":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "syn", "n_neurons": 256,
+                "alpha": 0.05, "learn_alpha": False,
+                "beta": 0.05, "learn_beta": False,
+                "threshold": spike_threshold+0.1, "learn_threshold": False,
+                "reset_mechanism": "zero"
+            },
+            "layer_1": {
+                "neuron_model": "rsyn", "n_neurons": 128,
+                "alpha": 0.07, "learn_alpha": False,
+                "beta": 0.07, "learn_beta": False,
+                "threshold": spike_threshold, "learn_threshold": False,
+                "reset_mechanism": "zero", "bias": True
+            },
+            "layer_2": {
+                "neuron_model": "rif", "n_neurons": 64,
+                "beta": 0.4, "learn_beta": True,
+                "threshold": spike_threshold, "learn_threshold": True,
+                "reset_mechanism": "zero", "bias": True
+            },
+            "layer_3": {
+                "neuron_model": "if", "n_neurons": 128,
+                "alpha": 0.1, "learn_alpha": True,
+                "beta": 0.6, "learn_beta": True,
+                "threshold": spike_threshold, "learn_threshold": True,
+                "reset_mechanism": "zero", "bias": True
+            },
+            "layer_4": {
+                "neuron_model": "if", "n_neurons": cfg.n_freq_bins,
+                "threshold": spike_threshold * 0.3, "learn_threshold": False,
+                "reset_mechanism": "subtract", "bias": False
+            },
+        }
+    
 
     else:
         raise ValueError(f"Unknown model_type: {model_type}")

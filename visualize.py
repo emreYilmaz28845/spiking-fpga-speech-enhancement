@@ -3,7 +3,7 @@ import os
 from utils.plot_utils import plot_firing_rates, plot_loss, plot_weight_deltas, plot_gradients,plot_learning_rate
 
 # (1) Kullanıcı path belirtmezse default olarak Trained/logs.json
-path = "Trained/2025-07-03_20-11_phased_rate_e3_len1000/logs.json"
+path = "Trained/2025-07-04_16-15_delta_e1_len700/logs.json"
 
 log_path = path if path else "Trained/logs.json"
 
