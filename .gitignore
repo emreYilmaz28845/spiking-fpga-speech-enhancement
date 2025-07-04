@@ -5,4 +5,8 @@ outputBackup/
 outputBackup2/
 AudioMNIST/
 audio/
-
+OldCodes/
+resultsCSV/
+testCodes/
+Trained/
+checkpoints/
