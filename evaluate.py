@@ -7,7 +7,7 @@ from models.builder import build_network
 from data.dataloader import get_dataloaders
 from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
-path = "Trained/2025-07-04_19-09_delta_e3_len700/trained_state_dict.pt"
+path = "Trained/2025-07-10_03-56_phased_rate_e5_len4000/trained_state_dict.pt"
 # Model yükle
 snn = build_network(cfg)
 latest_ckpt_folder = sorted(os.listdir("trained"))[-1]
@@ -57,7 +57,7 @@ timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
 out_folder = f"outputs/wavs/{timestamp}_{cfg.encode_mode}_e{cfg.n_epochs}_len{cfg.max_len}_hop{cfg.hop_length}_nfft{cfg.n_fft}"
 os.makedirs(out_folder, exist_ok=True)
 
-# === WAV dosyalarını kaydet ===
+# === WAV dosyalarını kaydet ===  
 reconstruct_without_stretch(clean_logstft_vis, log_min_val, log_max_val,
                             os.path.join(out_folder, "reconstructed_clean_STFT.wav"),
                             n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)

@@ -97,15 +97,15 @@ from utils.audio_utils import reconstruct_without_stretch
 from utils.config import cfg
 
 class DeltaReconstructionLoss(nn.Module):
-    def __init__(self, alpha=0.5, gamma_tf=1.0, gamma_sisdr=0.001, reduction="mean",cfg=None):
+    def __init__(self, alpha=0.5, gamma_stft=1.0, gamma_sisdr=0.001, reduction="mean",cfg=None):
         super().__init__()
         self.alpha = alpha
-        self.gamma_tf = gamma_tf
+        self.gamma_stft = gamma_stft
         self.gamma_sisdr = gamma_sisdr
         self.reduction = reduction
         self.cfg = cfg 
 
-    def forward(self, pred_spikes, target_spikes, mask=None,log_min=None, log_max=None):
+    def forward(self, pred, target, mask=None,log_min=None, log_max=None):
         """
         pred_spikes: [B, T, F] - predicted delta spikes
         target_stft: [B, T, F] - ground truth log-magnitude STFT
@@ -116,15 +116,16 @@ class DeltaReconstructionLoss(nn.Module):
         # trimmed_target_spikes = target_spikes[0][:T_real]
 
         T_real = int(mask[0].sum().item())
-        trimmed_spike_out = pred_spikes[0][:T_real]
-        trimmed_target_spikes = target_spikes[0][:T_real]
+        trimmed_spike_out = pred[0][:T_real]
+        trimmed_target_spikes = target[0][:T_real]
 
         pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode='delta', trim=True)
         target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode='delta', trim=True)
 
 
+
         # 🎯 2. Time-Frequency Domain Loss (Magnitude Only)
-        tf_loss = F.mse_loss(pred_reconstructed, target_reconstructed, reduction=self.reduction)
+        stft_loss = F.mse_loss(pred_reconstructed, target_reconstructed, reduction=self.reduction)
 
         log_min_val = log_min[0].item()
         log_max_val = log_max[0].item()
@@ -164,6 +165,6 @@ class DeltaReconstructionLoss(nn.Module):
         sisdr_loss= 0
 
         # 🔀 Combine
-        total_loss = self.gamma_tf * tf_loss + self.gamma_sisdr * sisdr_loss
+        total_loss = self.gamma_stft * stft_loss + self.gamma_sisdr * sisdr_loss
         return total_loss
 

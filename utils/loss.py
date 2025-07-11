@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils.encode import reconstruct_from_spikes
 
 class SpikePositionLoss(nn.Module):
     def __init__(
@@ -8,13 +9,18 @@ class SpikePositionLoss(nn.Module):
         tau: float = 5.0,
         lambda_pos: float = 1.0,
         lambda_vr:  float = 0.01,
+        gamma_stft: float = 1.0,  # Temporal focus factor
+        reduction: str = "mean",
         r_target:    float = None,
+        
         device: torch.device = None
     ):
         super().__init__()
         self.tau       = tau
         self.lambda_vr = lambda_vr
         self.lambda_pos = lambda_pos
+        self.gamma_stft  = gamma_stft
+        self.reduction = reduction
         self.r_target  = r_target
         self.device    = device or torch.device("cpu")
 
@@ -55,6 +61,23 @@ class SpikePositionLoss(nn.Module):
         else:
             vr_loss = F.mse_loss(p_f, t_f)
 
+
+        # ====== STFT Loss ======
+
+        T_real = int(mask[0].sum().item())
+        trimmed_spike_out = pred[0][:T_real]
+        trimmed_target_spikes = target[0][:T_real]
+
+        pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode='phased_rate', trim=True)
+        target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode='phased_rate', trim=True)
+
+
+
+        # 🎯 2. Time-Frequency Domain Loss (Magnitude Only)
+        stft_loss = F.mse_loss(pred_reconstructed, target_reconstructed, reduction=self.reduction)
+     
+
         # ====== Total Loss ======
-        loss = self.lambda_pos * pos_loss + self.lambda_vr * vr_loss
+        loss = self.lambda_pos * pos_loss + self.lambda_vr * vr_loss + self.gamma_stft * stft_loss
+        print(f"Position Loss: {self.lambda_pos * pos_loss:.4f}, VR Loss: {self.lambda_vr * vr_loss:.4f}, STFT Loss: {self.gamma_stft * stft_loss:.4f}, Total Loss: {loss.item():.4f}")
         return loss
