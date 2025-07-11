@@ -123,7 +123,6 @@ class DeltaReconstructionLoss(nn.Module):
         target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode='delta', trim=True)
 
 
-
         # 🎯 2. Time-Frequency Domain Loss (Magnitude Only)
         stft_loss = F.mse_loss(pred_reconstructed, target_reconstructed, reduction=self.reduction)
 

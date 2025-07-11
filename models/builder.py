@@ -4,7 +4,30 @@ from spikerplus import NetBuilder
 
 def build_network(cfg):
     net_dict = get_network_dict(cfg)
-    return NetBuilder(net_dict).build()
+    net = NetBuilder(net_dict).build()
+
+    if getattr(cfg, "load_cnn_weights", False):
+        # CNN modeliyle aynı yapıda FC-only model kur
+        from models.cnn import build_cnn  # varsa bu fonksiyonun aynısını al
+        cnn = build_cnn(cfg.n_freq_bins)
+        cnn.load_state_dict(torch.load("cnn_weights_stft.pth"))
+        cnn.eval()
+
+        # Mapping: CNN katmanlarındaki Conv1d → SNN katmanlarındaki Linear (fcX)
+        with torch.no_grad():
+            net.layers["fc1"].weight.data.copy_(cnn[0].weight.squeeze(-1))
+            net.layers["fc1"].bias.data.copy_(cnn[0].bias)
+
+            net.layers["fc2"].weight.data.copy_(cnn[2].weight.squeeze(-1))
+            net.layers["fc2"].bias.data.copy_(cnn[2].bias)
+
+            net.layers["fc3"].weight.data.copy_(cnn[4].weight.squeeze(-1))
+            net.layers["fc3"].bias.data.copy_(cnn[4].bias)
+
+        print("✔ CNN'den SNN'e ağırlıklar başarıyla yüklendi.")
+
+    return net
+
 
 def get_network_dict(cfg):
     example_input = torch.zeros(cfg.max_len, cfg.n_freq_bins)
@@ -219,7 +242,7 @@ def get_network_dict(cfg):
                 "reset_mechanism": "subtract", "bias": False
             }
         }
-    elif model_type == "CNN":
+    elif model_type == "CNNLike":
         return {
             "n_cycles": example_input.shape[0],  # T
             "n_inputs": example_input.shape[1],  # F
@@ -271,7 +294,27 @@ def get_network_dict(cfg):
                 "learn_threshold": True,
                 "reset_mechanism": "subtract"
             }
-        }       
+        },
+    elif model_type == "cnn-to-snn":
+        return {
+            "n_cycles": example_input.shape[0],  # T
+            "n_inputs": example_input.shape[1],  # F
+            "layer_0": {
+                "neuron_model": "lif", "n_neurons": 512,
+                "threshold": spike_threshold + 0.1, "learn_threshold": False,
+                "reset_mechanism": "subtract", "bias": True
+            },
+            "layer_1": {
+                "neuron_model": "lif", "n_neurons": 256,
+                "threshold": spike_threshold + 0.1, "learn_threshold": False,
+                "reset_mechanism": "subtract", "bias": True
+            },
+            "layer_2": {
+                "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
+                "threshold": spike_threshold + 0.1, "learn_threshold": False,
+                "reset_mechanism": "subtract", "bias": True
+            }
+        }
 
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
