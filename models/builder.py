@@ -7,24 +7,26 @@ def build_network(cfg):
     net = NetBuilder(net_dict).build()
 
     if getattr(cfg, "load_cnn_weights", False):
-        # CNN modeliyle aynı yapıda FC-only model kur
-        from models.cnn import build_cnn  # varsa bu fonksiyonun aynısını al
+        from models.cnn import build_cnn
         cnn = build_cnn(cfg.n_freq_bins)
         cnn.load_state_dict(torch.load("cnn_weights_stft.pth"))
         cnn.eval()
 
-        # Mapping: CNN katmanlarındaki Conv1d → SNN katmanlarındaki Linear (fcX)
         with torch.no_grad():
-            net.layers["fc1"].weight.data.copy_(cnn[0].weight.squeeze(-1))
-            net.layers["fc1"].bias.data.copy_(cnn[0].bias)
+            fc_idx = 0
+            for layer in cnn:
+                if isinstance(layer, torch.nn.Conv1d):
+                    fc_name = f"fc{fc_idx}"
+                    if fc_name in net.layers:
+                        net.layers[fc_name].weight.data.copy_(layer.weight.squeeze(-1))
+                        net.layers[fc_name].bias.data.copy_(layer.bias)
+                        fc_idx += 1
+                    else:
+                        print(f"Warning: {fc_name} not in SNN layers")
+        print(f"Successfully transferred {fc_idx} Conv1d layers to SNN fc layers.")
 
-            net.layers["fc2"].weight.data.copy_(cnn[2].weight.squeeze(-1))
-            net.layers["fc2"].bias.data.copy_(cnn[2].bias)
+    return net
 
-            net.layers["fc3"].weight.data.copy_(cnn[4].weight.squeeze(-1))
-            net.layers["fc3"].bias.data.copy_(cnn[4].bias)
-
-        print("✔ CNN'den SNN'e ağırlıklar başarıyla yüklendi.")
 
     return net
 

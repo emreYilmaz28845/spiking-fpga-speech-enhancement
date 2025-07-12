@@ -26,7 +26,7 @@ def test_cnn(cfg, show_plot=True, save_audio=True):
 
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
     model = build_cnn(cfg.n_freq_bins).to(device)
-    model.load_state_dict(torch.load("cnn_weights_stft.pth"))
+    model.load_state_dict(torch.load("checkpoints\CNN\cnn_weights_epoch_5.pth"))
     model.eval()
 
     os.makedirs("outputs", exist_ok=True)

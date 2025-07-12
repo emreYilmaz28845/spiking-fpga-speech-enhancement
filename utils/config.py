@@ -11,12 +11,12 @@ cfg = SimpleNamespace(
     spike_threshold=0.2, #0.2 for phased_rate, 0.01 for delta
     normalize=True,
     padding=True,
-    n_epochs=5,
+    n_epochs=10,
     batch_size=2,
     data_root="E:/VSProjects/datasets/audioVCTK",
     n_freq_bins=257,
     n_iter=32,
-    max_samples=None,
+    max_samples=6000,
     load_cnn_weights = True
 )
 

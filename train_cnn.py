@@ -41,6 +41,11 @@ def train_cnn(cfg):
         normalize=cfg.normalize,
         padding=cfg.padding,
     )
+    
+    if hasattr(cfg, "max_samples") and cfg.max_samples is not None:
+        dataset = torch.utils.data.Subset(dataset, range(min(cfg.max_samples, len(dataset))))
+    
+    
 
     # Train / Validation split
     total_samples = len(dataset)
@@ -50,7 +55,7 @@ def train_cnn(cfg):
     
     train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False)
-
+    print(f"Using {len(dataset)} total samples: {n_train} for training, {n_val} for validation.")
     # Model, optimizer, loss
     model = build_cnn(cfg.n_freq_bins).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
