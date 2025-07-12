@@ -25,7 +25,7 @@ def validate(model, val_loader, device, criterion):
             total_val_loss += loss_val.item()
     return total_val_loss / len(val_loader)
 
-def train_cnn(cfg):
+def train_cnn(cfg, resume_path=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Dataset creation
@@ -44,10 +44,7 @@ def train_cnn(cfg):
     
     if hasattr(cfg, "max_samples") and cfg.max_samples is not None:
         dataset = torch.utils.data.Subset(dataset, range(min(cfg.max_samples, len(dataset))))
-    
-    
 
-    # Train / Validation split
     total_samples = len(dataset)
     n_val = int(0.1 * total_samples)
     n_train = total_samples - n_val
@@ -56,43 +53,61 @@ def train_cnn(cfg):
     train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False)
     print(f"Using {len(dataset)} total samples: {n_train} for training, {n_val} for validation.")
-    # Model, optimizer, loss
+
     model = build_cnn(cfg.n_freq_bins).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = STFTLogLoss()
 
     train_losses = []
     val_losses = []
+    start_epoch = 0
+
+    # === RESUME ===
+    if resume_path is not None and os.path.exists(resume_path):
+        print(f"Resuming from checkpoint: {resume_path}")
+        checkpoint = torch.load(resume_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        train_losses = checkpoint.get("train_losses", [])
+        val_losses = checkpoint.get("val_losses", [])
+        start_epoch = checkpoint["epoch"]
+        print(f"Resumed from epoch {start_epoch}")
 
     model.train()
-    for epoch in range(cfg.n_epochs):
+    for epoch in range(start_epoch, cfg.n_epochs):
         total_loss = 0.0
         for i, batch in enumerate(train_loader):
             _, _, clean_normed, noisy_normed, *_ = batch
-            x = noisy_normed.to(device).permute(0, 2, 1)  # [B, F, T]
+            x = noisy_normed.to(device).permute(0, 2, 1)
             y = clean_normed.to(device).permute(0, 2, 1)
-    
+
             optimizer.zero_grad()
             out = model(x)
             loss = criterion(out, y)
             loss.backward()
             optimizer.step()
-    
+
             total_loss += loss.item()
             print(f"[Epoch {epoch+1}][Batch {i+1}] Loss: {loss.item():.4f}")
-    
+
         avg_train_loss = total_loss / len(train_loader)
         train_losses.append(avg_train_loss)
-    
+
         avg_val_loss = validate(model, val_loader, device, criterion)
         val_losses.append(avg_val_loss)
-    
+
         print(f"[Epoch {epoch+1}] Train Loss: {avg_train_loss:.6f} | Validation Loss: {avg_val_loss:.6f}")
-    
+
         # Save checkpoint
-        torch.save(model.state_dict(), f"checkpoints/CNN/cnn_weights_epoch_{epoch+1}.pth")
-    
-        # Plot and save loss curve
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_losses': train_losses,
+            'val_losses': val_losses
+        }, f"checkpoints/CNN/checkpoint_epoch_{epoch+1}.pth")
+
+        # Plot
         plt.figure()
         plt.plot(range(1, epoch+2), train_losses, label="Train Loss")
         plt.plot(range(1, epoch+2), val_losses, label="Validation Loss")
@@ -102,8 +117,9 @@ def train_cnn(cfg):
         plt.title("Training Progress")
         plt.savefig("loss_progress.png")
         plt.close()
-    
+
     print("Training completed. Loss curve saved as 'loss_progress.png'.")
+
 
 if __name__ == "__main__":
     train_cnn(cfg)

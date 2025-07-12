@@ -26,8 +26,6 @@ def build_network(cfg):
         print(f"Successfully transferred {fc_idx} Conv1d layers to SNN fc layers.")
 
     return net
-
-
     return net
 
 
