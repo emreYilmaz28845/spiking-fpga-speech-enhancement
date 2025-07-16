@@ -9,24 +9,27 @@ def build_network(cfg):
     if getattr(cfg, "load_cnn_weights", False):
         from models.cnn import build_cnn
         cnn = build_cnn(cfg.n_freq_bins)
-        cnn.load_state_dict(torch.load("cnn_weights_stft.pth"))
+        checkpoint = torch.load("checkpoints/CNN/checkpoint_epoch_20.pth")
+        cnn.load_state_dict(checkpoint["model_state_dict"])
         cnn.eval()
 
         with torch.no_grad():
-            fc_idx = 0
+            fc_idx = 1
             for layer in cnn:
                 if isinstance(layer, torch.nn.Conv1d):
                     fc_name = f"fc{fc_idx}"
                     if fc_name in net.layers:
                         net.layers[fc_name].weight.data.copy_(layer.weight.squeeze(-1))
-                        net.layers[fc_name].bias.data.copy_(layer.bias)
+                        if net.layers[fc_name].bias is not None:
+                            net.layers[fc_name].bias.data.copy_(layer.bias)
                         fc_idx += 1
                     else:
                         print(f"Warning: {fc_name} not in SNN layers")
-        print(f"Successfully transferred {fc_idx} Conv1d layers to SNN fc layers.")
+
+        print(f"Successfully transferred {fc_idx - 1} Conv1d layers to SNN fc layers.")
 
     return net
-    return net
+
 
 
 def get_network_dict(cfg):
@@ -315,6 +318,49 @@ def get_network_dict(cfg):
                 "reset_mechanism": "subtract", "bias": True
             }
         }
+    elif model_type == "cnn-to-snn-2":
+        return {
+            "n_cycles": example_input.shape[0],   # T
+            "n_inputs": example_input.shape[1],   # F (n_freq)
+            
+            "layer_0": {
+                "neuron_model": "lif",            # veya rsyn / rlif vs.
+                "n_neurons": 256,
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            },
+            "layer_1": {
+                "neuron_model": "lif",
+                "n_neurons": 512,
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            },
+            "layer_2": {
+                "neuron_model": "lif",
+                "n_neurons": 1024,
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            },
+            "layer_3": {
+                "neuron_model": "lif",
+                "n_neurons": 512,
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            },
+            "layer_4": {
+                "neuron_model": "lif",
+                "n_neurons": 256,
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            },
+            "layer_5": {
+                "neuron_model": "lif",
+                "n_neurons": example_input.shape[1],  # output same as input freq bins
+                "threshold": spike_threshold,
+                "reset_mechanism": "subtract"
+            }
+        }
+
 
     else:
         raise ValueError(f"Unknown model_type: {model_type}")

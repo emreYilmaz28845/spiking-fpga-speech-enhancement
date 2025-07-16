@@ -27,7 +27,7 @@ import torch.nn.functional as F
 
 
 class STFTLogLoss(nn.Module):
-    def __init__(self, λ_mag=1.0, λ_sc=0.1, eps=1e-8):
+    def __init__(self, λ_mag=1.0, λ_sc=0.5, eps=1e-8):
         super().__init__()
         self.λ_mag, self.λ_sc, self.eps = λ_mag, λ_sc, eps
 

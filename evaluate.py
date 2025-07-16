@@ -8,13 +8,14 @@ from data.dataloader import get_dataloaders
 from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
 path = "Trained/2025-07-10_03-56_phased_rate_e5_len4000/trained_state_dict.pt"
-# Model yükle
+
+path = "checkpoints/CNN/checkpoint_epoch_20.pth"
+checkpoint = torch.load(path, map_location="cpu")
+
 snn = build_network(cfg)
-latest_ckpt_folder = sorted(os.listdir("trained"))[-1]
-model_path = path if path else os.path.join("Trained", latest_ckpt_folder)
-print(f"Loading model from: {model_path}")
-snn.load_state_dict(torch.load(model_path))
+#snn.load_state_dict(checkpoint["model_state_dict"])
 snn.eval()
+
 
 # Dataloader al
 _, val_loader = get_dataloaders(cfg)

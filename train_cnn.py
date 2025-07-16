@@ -122,4 +122,4 @@ def train_cnn(cfg, resume_path=None):
 
 
 if __name__ == "__main__":
-    train_cnn(cfg)
+    train_cnn(cfg, resume_path="checkpoints/CNN/checkpoint_epoch_43.pth")
