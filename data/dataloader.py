@@ -46,3 +46,31 @@ def get_validation_sample(cfg):
         "log_min": sample_batch[4][0].item(),
         "log_max": sample_batch[5][0].item()
     }
+
+
+from torch.utils.data import Dataset
+import torch
+import os
+
+class PreEncodedDataset(Dataset):
+    def __init__(self, preprocessed_dir):
+        self.paths = sorted([
+            os.path.join(preprocessed_dir, f)
+            for f in os.listdir(preprocessed_dir) if f.endswith(".pt")
+        ])
+
+    def __getitem__(self, idx):
+        data = torch.load(self.paths[idx])
+        return (
+            data["noisy_spikes"],
+            data["clean_spikes"],
+            data["clean_normed"],
+            data["noisy_normed"],
+            data["log_min"],
+            data["log_max"],
+            data["orig_len"],
+            data["mask"]
+        )
+
+    def __len__(self):
+        return len(self.paths)

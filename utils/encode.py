@@ -191,6 +191,8 @@ def spike_encode(
         spikes = sod_encode(log_stft, threshold)
     elif mode == "basic":
         spikes = basic_encode(log_stft, threshold)
+    elif mode == "none":
+        spikes = torch.zeros_like(log_stft)
     else:
         raise ValueError(f"Unsupported encoding mode: {mode}")
 
