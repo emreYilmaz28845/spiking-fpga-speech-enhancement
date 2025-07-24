@@ -6,27 +6,27 @@ def build_network(cfg):
     net_dict = get_network_dict(cfg)
     net = NetBuilder(net_dict).build()
 
-    if getattr(cfg, "load_cnn_weights", False):
-        from models.cnn import build_cnn
-        cnn = build_cnn(cfg.n_freq_bins)
-        checkpoint = torch.load("checkpoints/CNN/checkpoint_epoch_20.pth")
-        cnn.load_state_dict(checkpoint["model_state_dict"])
-        cnn.eval()
+    # if getattr(cfg, "load_cnn_weights", False):
+    #     from models.cnn import build_cnn
+    #     cnn = build_cnn(cfg.n_freq_bins)
+    #     checkpoint = torch.load("checkpoints/CNN/checkpoint_epoch_20.pth")
+    #     cnn.load_state_dict(checkpoint["model_state_dict"])
+    #     cnn.eval()
 
-        with torch.no_grad():
-            fc_idx = 1
-            for layer in cnn:
-                if isinstance(layer, torch.nn.Conv1d):
-                    fc_name = f"fc{fc_idx}"
-                    if fc_name in net.layers:
-                        net.layers[fc_name].weight.data.copy_(layer.weight.squeeze(-1))
-                        if net.layers[fc_name].bias is not None:
-                            net.layers[fc_name].bias.data.copy_(layer.bias)
-                        fc_idx += 1
-                    else:
-                        print(f"Warning: {fc_name} not in SNN layers")
+    #     with torch.no_grad():
+    #         fc_idx = 1
+    #         for layer in cnn:
+    #             if isinstance(layer, torch.nn.Conv1d):
+    #                 fc_name = f"fc{fc_idx}"
+    #                 if fc_name in net.layers:
+    #                     net.layers[fc_name].weight.data.copy_(layer.weight.squeeze(-1))
+    #                     if net.layers[fc_name].bias is not None:
+    #                         net.layers[fc_name].bias.data.copy_(layer.bias)
+    #                     fc_idx += 1
+    #                 else:
+    #                     print(f"Warning: {fc_name} not in SNN layers")
 
-        print(f"Successfully transferred {fc_idx - 1} Conv1d layers to SNN fc layers.")
+    #     print(f"Successfully transferred {fc_idx - 1} Conv1d layers to SNN fc layers.")
 
     return net
 
@@ -224,7 +224,7 @@ def get_network_dict(cfg):
                 "learn_alpha": True,                 
                 "beta": 0.05,                         
                 "learn_beta": True,                  
-                "threshold": spike_threshold + 0.1,  #phased_rate için 0.5, delta için 0.1
+                "threshold": spike_threshold + 0.2,  #phased_rate için 0.5, delta için 0.1
                 "learn_threshold": True,
                 "reset_mechanism": "subtract"        
             },
@@ -235,11 +235,59 @@ def get_network_dict(cfg):
                 "learn_alpha": True,                 
                 "beta": 0.05,                         
                 "learn_beta": True,                  
-                "threshold": spike_threshold + 0.1, #phased_rate için 0.5, delta için 0.1
+                "threshold": spike_threshold + 0.2, #phased_rate için 0.5, delta için 0.1
                 "learn_threshold": True,
                 "reset_mechanism": "subtract"        
             },
             "layer_2": {
+                "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
+                "threshold": spike_threshold + 0.1, "learn_threshold": True, #phased_rate için 0.1, delta için 0
+                "reset_mechanism": "subtract", "bias": False
+            }
+        }
+    elif model_type == "spiking-fsb-conv-noLif":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.1,  #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_1": {
+                "neuron_model": "rsyn",               
+                "n_neurons": cfg.n_freq_bins,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.1, #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            }
+        }
+    elif model_type == "spiking-fsb-conv-noRsyn2":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.1,  #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_1": {
                 "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
                 "threshold": spike_threshold, "learn_threshold": True, #phased_rate için 0.1, delta için 0
                 "reset_mechanism": "subtract", "bias": False

@@ -1,4 +1,8 @@
+import sys
 import os
+
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import time
 import csv
 import torchaudio
@@ -7,7 +11,7 @@ from tqdm import tqdm
 
 from utils.encode import spike_encode, reconstruct_from_spikes
 from utils.audio_utils import reconstruct_without_stretch
-from dataloader_forRecon import SpikeSpeechEnhancementDatasetForRecon
+from data.dataloader_forRecon import SpikeSpeechEnhancementDatasetForRecon
 
 # === Global parameters
 sample_rate = 16000
@@ -17,14 +21,14 @@ padding = True
 
 # === Hyperparameter grid (mode-specific hop_lengths)
 mode_to_hop_lengths = {
-    "delta": [256],
-    "phased_rate": [256], #[16, 32, 256]  
-    "sod": [256],
-    "rate": [256],
-    "basic": [256]
+    #"delta": [256],
+    "phased_rate": [16, 32, 64, 128]  
+    #"sod": [256],
+    #"rate": [256],
+    #"basic": [256]
 }
-encode_modes = ["delta", "phased_rate", "sod", "rate", "basic"]
-n_ffts = [512, 1024]
+encode_modes = ["phased_rate"]#, "phased_rate", "sod", "rate", "basic"]
+n_ffts = [512]
 
 # === Paths
 data_root = r"C:/VSProjects/spiking-fpga-project/audio"

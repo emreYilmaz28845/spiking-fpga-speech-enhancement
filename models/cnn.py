@@ -1,4 +1,5 @@
 import torch.nn as nn
+from models.rced import RCED10
 
 
 
@@ -24,19 +25,22 @@ import torch.nn as nn
 #         nn.Conv1d(256, n_freq, kernel_size=1)   # = fc3 (çıktı projeksiyonu)
 #     )
 
-def build_cnn(n_freq):
-    return nn.Sequential(
-        nn.Conv1d(n_freq, 256, kernel_size=1),
-        nn.ReLU(),
-        nn.Conv1d(256, 512, kernel_size=1),
-        nn.ReLU(),
-        nn.Conv1d(512, 1024, kernel_size=1,),
-        nn.ReLU(),
-        nn.Conv1d(1024, 512, kernel_size=1),
-        nn.ReLU(),
-        nn.Conv1d(512, 256, kernel_size=1),
-        nn.ReLU(),
-        nn.Conv1d(256, n_freq, kernel_size=1)
-    )
+# def build_cnn(n_freq):
+#     return nn.Sequential(
+#         nn.Conv1d(n_freq, 256, kernel_size=1),
+#         nn.ReLU(),
+#         nn.Conv1d(256, 512, kernel_size=1),
+#         nn.ReLU(),
+#         nn.Conv1d(512, 1024, kernel_size=1,),
+#         nn.ReLU(),
+#         nn.Conv1d(1024, 512, kernel_size=1),
+#         nn.ReLU(),
+#         nn.Conv1d(512, 256, kernel_size=1),
+#         nn.ReLU(),
+#         nn.Conv1d(256, n_freq, kernel_size=1)
+#     )
 
 
+def build_cnn(n_freq_bins):
+    """RCED10 tabanlı CNN yapısı."""
+    return RCED10(n_freq_bins=n_freq_bins)  # RCED10, n_freq_bins parametresini kendi içinde kullanır.

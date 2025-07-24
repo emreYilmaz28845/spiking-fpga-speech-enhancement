@@ -7,9 +7,9 @@ import os
 snn = build_network(cfg)
 train_loader, val_loader = get_dataloaders(cfg)
 trainer = Trainer(snn, cfg=cfg)
-
-checkpoint_path = "checkpoint/checkpoint_e10.pth"
-checkpoint_flag = False # Set to True if you want to resume from a checkpoint
+print(f"Training with model type: {cfg.model_type}")
+checkpoint_path = "checkpoints/spiking-fsb-conv/checkpoint_e20.pth"
+checkpoint_flag = True # Set to True if you want to resume from a checkpoint
 if os.path.exists(checkpoint_path) and checkpoint_flag:
     print("Checkpoint found, continuing the training...")
     start_epoch = trainer.resume_from_checkpoint(checkpoint_path)

@@ -7,15 +7,22 @@ from models.builder import build_network
 from data.dataloader import get_dataloaders
 from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
-path = "Trained/2025-07-10_03-56_phased_rate_e5_len4000/trained_state_dict.pt"
+path = "Trained/2025-07-24_14-52_phased_rate_e5_len1000_arch_spiking-fsb-conv-noRsyn2/trained_state_dict.pt"
 
-path = "checkpoints/CNN/checkpoint_epoch_20.pth"
-checkpoint = torch.load(path, map_location="cpu")
-
+encode_mode = path.split("_")[2]
+if "rate" in path.split("_")[3]:  # phased_rate gibi iki parçalı modlar için
+    encode_mode = path.split("_")[2] + "_" + path.split("_")[3]
+print(f"Encode mode: {encode_mode}")
+n_epochs = path.split("_e")[-1].split("_")[0]
+len = path.split("_len")[-1].split("_")[0]
+arch = path.split("_arch_")[-1].split("/")[0]
+# Model yükle
 snn = build_network(cfg)
-#snn.load_state_dict(checkpoint["model_state_dict"])
+latest_ckpt_folder = sorted(os.listdir("trained"))[-1]
+model_path = path if path else os.path.join("Trained", latest_ckpt_folder)
+print(f"Loading model from: {model_path}")
+snn.load_state_dict(torch.load(model_path))
 snn.eval()
-
 
 # Dataloader al
 _, val_loader = get_dataloaders(cfg)
@@ -34,8 +41,8 @@ with torch.no_grad():
     trimmed_spike_out = spike_out[0][:T_real]
     trimmed_target_spikes = target_spikes[0][:T_real]
 
-    pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode=cfg.encode_mode, trim=True)
-    target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode=cfg.encode_mode, trim=True)
+    pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode=encode_mode, trim=True)
+    target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode=encode_mode, trim=True)
 
 clean_logstft = clean_logstft[0][:T_real]
 noisy_logstft = noisy_logstft[0][:T_real]
@@ -55,7 +62,7 @@ log_max_val = log_max[0].item()
 
 # === Klasör ismini oluştur ===
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-out_folder = f"outputs/wavs/{timestamp}_{cfg.encode_mode}_e{cfg.n_epochs}_len{cfg.max_len}_hop{cfg.hop_length}_nfft{cfg.n_fft}"
+out_folder = f"outputs/wavs/{timestamp}_{encode_mode}_e{n_epochs}_len{len}_hop{cfg.hop_length}_nfft{cfg.n_fft}_arch_{arch}"
 os.makedirs(out_folder, exist_ok=True)
 
 # === WAV dosyalarını kaydet ===  

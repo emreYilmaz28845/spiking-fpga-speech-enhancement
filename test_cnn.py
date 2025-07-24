@@ -4,13 +4,27 @@ from data.dataloader import SpikeSpeechEnhancementDataset
 from utils.config import cfg
 from models.cnn import build_cnn
 import matplotlib.pyplot as plt
-from utils.audio_utils import reconstruct_without_stretch  # az önce verdiğin fonksiyon
+from utils.audio_utils import reconstruct_without_stretch
 import os
 
 def test_cnn(cfg, show_plot=True, save_audio=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Dataset
+    # === Load checkpoint
+    ckpt_path = "Trained/2025-07-20_02-17-40_none_e1000_len800_rced/checkpoint_epoch_700.pth"
+    checkpoint = torch.load(ckpt_path, map_location=device)
+    ckpt_folder = os.path.basename(os.path.dirname(ckpt_path))  # 2025-07-19_15-00-56_none_e100_len800_rced
+
+    # === Output directory
+    output_dir = os.path.join("outputs", "wavs", ckpt_folder)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # === Load model
+    model = build_cnn(cfg.n_freq_bins).to(device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+
+    # === Dataset
     dataset = SpikeSpeechEnhancementDataset(
         noisy_dir=f"{cfg.data_root}/noisy",
         clean_dir=f"{cfg.data_root}/clean",
@@ -23,15 +37,9 @@ def test_cnn(cfg, show_plot=True, save_audio=True):
         normalize=cfg.normalize,
         padding=cfg.padding,
     )
-
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
-    model = build_cnn(cfg.n_freq_bins).to(device)
-    checkpoint = torch.load("checkpoints/CNN/checkpoint_epoch_50.pth", map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
 
-    os.makedirs("outputs", exist_ok=True)
-
+    # === Inference loop
     for i, batch in enumerate(loader):
         _, _, clean_normed, noisy_normed, log_min, log_max, original_length, _ = batch
         x = noisy_normed.to(device).permute(0, 2, 1)  # [1, F, T]
@@ -45,32 +53,35 @@ def test_cnn(cfg, show_plot=True, save_audio=True):
         log_max = log_max[0].item()
         original_length = original_length[0].item()
 
-        # === Ses kaydı ===
         if save_audio:
+            wav_path = os.path.join(output_dir, f"cnn_output_sample{i}.wav")
             reconstruct_without_stretch(
                 logstft_tensor=pred,
                 log_min=log_min,
                 log_max=log_max,
-                filename=f"outputs/cnn_output_sample{i}.wav",
+                filename=wav_path,
                 n_fft=cfg.n_fft,
                 hop_length=cfg.hop_length,
                 sample_rate=cfg.sample_rate,
                 n_iter=cfg.n_iter,
                 original_length=original_length
             )
-            print(f"[✓] Audio saved to outputs/cnn_output_sample{i}.wav")
+            print(f"Audio saved to {wav_path}")
 
-        # === Görselleştirme ===
         if show_plot:
-            plt.figure(figsize=(12, 4))
-            plt.subplot(1, 2, 1)
-            plt.imshow(y_true.cpu().squeeze().numpy(), origin='lower', aspect='auto')
-            plt.title("Ground Truth")
-            plt.subplot(1, 2, 2)
-            plt.imshow(pred.numpy(), origin='lower', aspect='auto')
-            plt.title("Predicted Output")
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+            axes[0].imshow(y_true.cpu().squeeze().numpy(), origin='lower', aspect='auto')
+            axes[0].set_title("Ground Truth")
+            axes[1].imshow(pred.numpy(), origin='lower', aspect='auto')
+            axes[1].set_title("Predicted Output")
             plt.tight_layout()
+
+            if save_audio:
+                fig_path = os.path.join(output_dir, f"cnn_output_sample{i}.png")
+                plt.savefig(fig_path, dpi=150)
+                print(f"Plot saved to {fig_path}")
             plt.show()
+
         break  # sadece ilk örnek
 
 test_cnn(cfg)
