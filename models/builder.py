@@ -245,6 +245,38 @@ def get_network_dict(cfg):
                 "reset_mechanism": "subtract", "bias": True
             }
         }
+    elif model_type == "spiking-fsb-conv-filter-predict":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.3,  #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_1": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.3, #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_2": {
+                "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
+                "threshold": spike_threshold + 0.2, "learn_threshold": True, #phased_rate için 0.1, delta için 0
+                "reset_mechanism": "subtract", "bias": True
+            }
+        }
     elif model_type == "spiking-fsb-conv-noLif":
         return {
             "n_cycles": example_input.shape[0],

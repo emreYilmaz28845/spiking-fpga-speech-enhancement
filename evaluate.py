@@ -40,13 +40,6 @@ with torch.no_grad():
     noisy_spec = noisy_logstft[0, :T_real, :].to(spikes.device)  # [T_real, F]
     mask_trim  = mask[0, :T_real].to(spikes.device)              # [T_real]
 
-    # # denormalize if using predict_filter
-    # if cfg.normalize and cfg.predict_filter:
-    #     lm = log_min[0].view(1,1).to(spikes.device)
-    #     lM = log_max[0].view(1,1).to(spikes.device)
-    #     clean_spec = clean_spec * (lM - lm) + lm
-    #     noisy_spec = noisy_spec * (lM - lm) + lm
-
     # clamp output to [0,1]
     pred_trim = spikes[0, :T_real, :].clamp(0.0,1.0)  # [T_real, F]
 
@@ -55,11 +48,14 @@ with torch.no_grad():
     noisy_vis = noisy_spec.cpu().T
 
     if cfg.predict_filter:
-        # exp to get magnitudes, mask & denoise
-        mag_noisy = torch.exp(noisy_spec)     # [T_real, F]
-        mag_dn    = pred_trim * mag_noisy     # [T_real, F]
-        pred_vis  = mag_dn.cpu().T             # [F, T_real]
-        targ_vis  = torch.exp(clean_spec).cpu().T
+        # 1) exp() → magnitude, 2) apply mask, 3) back to log‑STFT, so reconstructor sees log‑scale
+        eps       = 1e-6
+        mag_noisy = torch.exp(noisy_spec)                  # [T_real, F]
+        mag_dn    = pred_trim * mag_noisy                  # [T_real, F]
+        log_dn    = torch.log(mag_dn + eps)                # [T_real, F]
+        pred_vis  = log_dn.cpu().T                         # [F, T_real]  ← now log‑STFT
+        # ground truth is already log‑STFT:
+        targ_vis  = clean_spec.cpu().T    
     else:
         # reconstruct log‐STFT out of spikes
         pred_vis = reconstruct_from_spikes(
