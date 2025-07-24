@@ -7,89 +7,123 @@ from models.builder import build_network
 from data.dataloader import get_dataloaders
 from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
-path = "Trained/2025-07-24_14-52_phased_rate_e5_len1000_arch_spiking-fsb-conv-noRsyn2/trained_state_dict.pt"
 
-encode_mode = path.split("_")[2]
-if "rate" in path.split("_")[3]:  # phased_rate gibi iki parçalı modlar için
-    encode_mode = path.split("_")[2] + "_" + path.split("_")[3]
-print(f"Encode mode: {encode_mode}")
-n_epochs = path.split("_e")[-1].split("_")[0]
-len = path.split("_len")[-1].split("_")[0]
-arch = path.split("_arch_")[-1].split("/")[0]
-# Model yükle
+# 1) load model
+path = "Trained/2025-07-24_19-53_phased_rate_e5_len4000_arch_spiking-fsb-conv/trained_state_dict.pt"
 snn = build_network(cfg)
-latest_ckpt_folder = sorted(os.listdir("trained"))[-1]
-model_path = path if path else os.path.join("Trained", latest_ckpt_folder)
-print(f"Loading model from: {model_path}")
-snn.load_state_dict(torch.load(model_path))
+snn.load_state_dict(torch.load(path))
 snn.eval()
 
-# Dataloader al
+# 2) get one batch
 _, val_loader = get_dataloaders(cfg)
-sample_batch = next(iter(val_loader))
-input_spikes, target_spikes, clean_logstft, noisy_logstft, log_min, log_max, original_length, mask = sample_batch
+(input_spikes,
+ target_spikes,
+ clean_logstft,
+ noisy_logstft,
+ log_min,
+ log_max,
+ original_length,
+ mask) = next(iter(val_loader))
 
-# Girişleri hazırlama
-input_spikes = input_spikes.permute(1, 0, 2)  # [T, B, F]
+# [T, B, F] for inference
+input_spikes = input_spikes.permute(1, 0, 2)
 
 with torch.no_grad():
+    # forward
     snn(input_spikes)
-    _, spike_out = list(snn.spk_rec.items())[-1]  # [T, B, F]
-    spike_out = spike_out.permute(1, 0, 2)        # [B, T, F]
+    _, rec = list(snn.spk_rec.items())[-1]     # [T, B, F]
+    spikes = rec.permute(1, 0, 2)              # [B, T_padded, F]
 
-    T_real = int(mask[0].sum().item())
-    trimmed_spike_out = spike_out[0][:T_real]
-    trimmed_target_spikes = target_spikes[0][:T_real]
+    # true length
+    T_real     = int(mask[0].sum().item())
+    clean_spec = clean_logstft[0, :T_real, :].to(spikes.device)  # [T_real, F]
+    noisy_spec = noisy_logstft[0, :T_real, :].to(spikes.device)  # [T_real, F]
+    mask_trim  = mask[0, :T_real].to(spikes.device)              # [T_real]
 
-    pred_reconstructed = reconstruct_from_spikes(trimmed_spike_out, mode=encode_mode, trim=True)
-    target_reconstructed = reconstruct_from_spikes(trimmed_target_spikes, mode=encode_mode, trim=True)
+    # # denormalize if using predict_filter
+    # if cfg.normalize and cfg.predict_filter:
+    #     lm = log_min[0].view(1,1).to(spikes.device)
+    #     lM = log_max[0].view(1,1).to(spikes.device)
+    #     clean_spec = clean_spec * (lM - lm) + lm
+    #     noisy_spec = noisy_spec * (lM - lm) + lm
 
-clean_logstft = clean_logstft[0][:T_real]
-noisy_logstft = noisy_logstft[0][:T_real]
+    # clamp output to [0,1]
+    pred_trim = spikes[0, :T_real, :].clamp(0.0,1.0)  # [T_real, F]
 
+    # move to CPU and transpose to [F, T]
+    clean_vis = clean_spec.cpu().T
+    noisy_vis = noisy_spec.cpu().T
 
-# Transpose to [F, T]
-predicted_vis = pred_reconstructed.cpu().T
-ground_truth_vis = target_reconstructed.cpu().T
-clean_logstft_vis = clean_logstft.cpu().T
-noisy_logstft_vis = noisy_logstft.cpu().T
+    if cfg.predict_filter:
+        # exp to get magnitudes, mask & denoise
+        mag_noisy = torch.exp(noisy_spec)     # [T_real, F]
+        mag_dn    = pred_trim * mag_noisy     # [T_real, F]
+        pred_vis  = mag_dn.cpu().T             # [F, T_real]
+        targ_vis  = torch.exp(clean_spec).cpu().T
+    else:
+        # reconstruct log‐STFT out of spikes
+        pred_vis = reconstruct_from_spikes(
+            pred_trim, cfg.encode_mode, trim=True
+        ).cpu().T
+        targ_vis = reconstruct_from_spikes(
+            target_spikes[0, :T_real], cfg.encode_mode, trim=True
+        ).cpu().T
 
-pred_spikes = trimmed_spike_out.cpu().T
-target_spikes_vis = trimmed_target_spikes.cpu().T
-
-log_min_val = log_min[0].item()
-log_max_val = log_max[0].item()
-
-# === Klasör ismini oluştur ===
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-out_folder = f"outputs/wavs/{timestamp}_{encode_mode}_e{n_epochs}_len{len}_hop{cfg.hop_length}_nfft{cfg.n_fft}_arch_{arch}"
+# build output folder
+timestamp  = datetime.now().strftime("%Y-%m-%d_%H-%M")
+suffix     = "masked" if cfg.predict_filter else "STFT"
+out_folder = os.path.join("outputs", "wavs",
+                          f"{timestamp}_{cfg.encode_mode}_len{cfg.max_len}_{suffix}")
 os.makedirs(out_folder, exist_ok=True)
 
-# === WAV dosyalarını kaydet ===  
-reconstruct_without_stretch(clean_logstft_vis, log_min_val, log_max_val,
-                            os.path.join(out_folder, "reconstructed_clean_STFT.wav"),
-                            n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+# write WAVs
+# clean
+reconstruct_without_stretch(
+    clean_vis,
+    log_min[0].item(), log_max[0].item(),
+    os.path.join(out_folder,
+                 "clean.wav" if cfg.predict_filter else "clean_STFT.wav"),
+    n_fft=cfg.n_fft, hop_length=cfg.hop_length,
+    sample_rate=cfg.sample_rate, n_iter=cfg.n_iter
+)
 
-reconstruct_without_stretch(noisy_logstft_vis, log_min_val, log_max_val,
-                            os.path.join(out_folder, "reconstructed_noisy_STFT.wav"),
-                            n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+# noisy
+reconstruct_without_stretch(
+    noisy_vis,
+    log_min[0].item(), log_max[0].item(),
+    os.path.join(out_folder,
+                 "noisy.wav" if cfg.predict_filter else "noisy_STFT.wav"),
+    n_fft=cfg.n_fft, hop_length=cfg.hop_length,
+    sample_rate=cfg.sample_rate, n_iter=cfg.n_iter
+)
 
-reconstruct_without_stretch(predicted_vis, log_min_val, log_max_val,
-                            os.path.join(out_folder, "reconstructed_predicted_STFT.wav"),
-                            n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+# predicted
+reconstruct_without_stretch(
+    pred_vis,
+    log_min[0].item(), log_max[0].item(),
+    os.path.join(out_folder,
+                 "predicted_masked.wav" if cfg.predict_filter else "predicted_STFT.wav"),
+    n_fft=cfg.n_fft, hop_length=cfg.hop_length,
+    sample_rate=cfg.sample_rate, n_iter=cfg.n_iter
+)
 
-reconstruct_without_stretch(ground_truth_vis, log_min_val, log_max_val,
-                            os.path.join(out_folder, "reconstructed_target_STFT.wav"),
-                            n_fft=cfg.n_fft, hop_length=cfg.hop_length, sample_rate=cfg.sample_rate, n_iter=cfg.n_iter)
+# target only in STFT‐mode
+if not cfg.predict_filter:
+    reconstruct_without_stretch(
+        targ_vis,
+        log_min[0].item(), log_max[0].item(),
+        os.path.join(out_folder, "target_STFT.wav"),
+        n_fft=cfg.n_fft, hop_length=cfg.hop_length,
+        sample_rate=cfg.sample_rate, n_iter=cfg.n_iter
+    )
 
+# final plot
 plot_stft_comparison(
     out_folder,
-    pred_spikes,
-    target_spikes_vis,
-    predicted_vis,
-    ground_truth_vis,
-    clean_logstft_vis,
-    snn
+    None if cfg.predict_filter else pred_trim.cpu().T,
+    None if cfg.predict_filter else target_spikes[0, :T_real].cpu().T,
+    pred_vis, targ_vis, clean_vis, snn
 )
+
 print(f"WAV files saved to: {out_folder}")
-print(f"Plots saved in: {out_folder}/plots")
+print(f"Plots saved to: {os.path.join(out_folder,'plots')}")

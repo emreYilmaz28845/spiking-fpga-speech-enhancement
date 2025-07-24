@@ -11,7 +11,7 @@ cfg = SimpleNamespace(
     spike_threshold=0.2, #0.2 for phased_rate, 0.01 for delta
     normalize=True,
     padding=True,
-    n_epochs=40,
+    n_epochs=5,
     batch_size=32,
     data_root="E:/VSProjects/datasets/audioVCTK",
     n_freq_bins=257,
@@ -20,5 +20,6 @@ cfg = SimpleNamespace(
     load_cnn_weights = False, 
     use_preencoded= False,
     use_preencoded_noEncode=False,
+    predict_filter = True
 )
 

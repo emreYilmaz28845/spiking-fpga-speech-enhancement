@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
 import os
+from typing import Optional
 
 def plot_firing_rates(logs, save_path):
     batches = list(range(len(logs['target_rate'])))
@@ -82,66 +83,79 @@ def plot_learning_rate(logs, save_path):
     plt.tight_layout()
     plt.savefig(save_path)
     
-def plot_stft_comparison(output_dir, pred_spikes, target_spikes_vis,
-                          predicted_vis, ground_truth_vis,
-                          clean_logstft_vis, snn):
-    # Create folder
+def plot_stft_comparison(
+    output_dir: str,
+    pred_spikes: Optional[np.ndarray],
+   target_spikes_vis: Optional[np.ndarray],
+    predicted_vis: np.ndarray,
+    ground_truth_vis: np.ndarray,
+    clean_logstft_vis: np.ndarray,
+    snn
+):
     plot_dir = os.path.join(output_dir, "plots")
     os.makedirs(plot_dir, exist_ok=True)
 
-    # 1. Spike and STFT comparison
-    plt.figure(figsize=(14, 12))
+    # 1) Spike / STFT karşılaştırma
+    fig, axes = plt.subplots(3, 2, figsize=(14, 12))
+    axes = axes.flatten()
 
-    plt.subplot(3, 2, 1)
-    plt.imshow(pred_spikes, aspect='auto', origin='lower')
-    plt.title("Predicted Spikes")
-    plt.xlabel("Time")
-    plt.ylabel("STFT Bin")
+    # A: Predicted Spikes
+    if pred_spikes is not None:
+        im0 = axes[0].imshow(pred_spikes, aspect='auto', origin='lower')
+        axes[0].set_title("Predicted Spikes")
+        fig.colorbar(im0, ax=axes[0])
+    else:
+        axes[0].axis('off')
 
-    plt.subplot(3, 2, 2)
-    plt.imshow(target_spikes_vis, aspect='auto', origin='lower')
-    plt.title("Target Spikes")
-    plt.xlabel("Time")
-    plt.ylabel("STFT Bin")
+    # B: Target Spikes
+    if target_spikes_vis is not None:
+        im1 = axes[1].imshow(target_spikes_vis, aspect='auto', origin='lower')
+        axes[1].set_title("Target Spikes")
+        fig.colorbar(im1, ax=axes[1])
+    else:
+        axes[1].axis('off')
 
-    plt.subplot(3, 2, 3)
-    plt.imshow(predicted_vis, aspect='auto', origin='lower')
-    plt.title("Reconstructed Log-STFT (Predicted)")
-    plt.xlabel("Time")
-    plt.ylabel("STFT Bin")
+    # C: Reconstructed Predicted STFT
+    im2 = axes[2].imshow(predicted_vis, aspect='auto', origin='lower')
+    axes[2].set_title("Reconstructed Log-STFT (Predicted)")
+    fig.colorbar(im2, ax=axes[2])
 
-    plt.subplot(3, 2, 4)
-    plt.imshow(ground_truth_vis, aspect='auto', origin='lower')
-    plt.title("Reconstructed Log-STFT (Target)")
-    plt.xlabel("Time")
-    plt.ylabel("STFT Bin")
+    # D: Reconstructed Target STFT
+    im3 = axes[3].imshow(ground_truth_vis, aspect='auto', origin='lower')
+    axes[3].set_title("Reconstructed Log-STFT (Target)")
+    fig.colorbar(im3, ax=axes[3])
 
-    plt.subplot(3, 2, 5)
-    plt.imshow(clean_logstft_vis, aspect='auto', origin='lower')
-    plt.title("Original Clean Log-STFT")
-    plt.xlabel("Time")
-    plt.ylabel("STFT Bin")
+    # E: Clean STFT
+    im4 = axes[4].imshow(clean_logstft_vis, aspect='auto', origin='lower')
+    axes[4].set_title("Original Clean Log-STFT")
+    fig.colorbar(im4, ax=axes[4])
 
+    # F: boş bırak
+    axes[5].axis('off')
+
+    for ax in axes:
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Frequency Bin")
     plt.tight_layout()
-    plt.savefig(os.path.join(plot_dir, "spike_logstft_comparison.png"))
-    plt.close()
+    fig.savefig(os.path.join(plot_dir, "spike_logstft_comparison.png"))
+    plt.close(fig)
 
-    # 2. Spiking activity for each layer
+    # 2) Her layer için spiking activity
     layer_names = list(snn.spk_rec.keys())
     n_layers = len(layer_names)
-    fig, axes = plt.subplots(n_layers, 1, figsize=(12, 2 * n_layers), sharex=True)
-
+    fig2, axs2 = plt.subplots(n_layers, 1, figsize=(12, 2 * n_layers), sharex=True)
     if n_layers == 1:
-        axes = [axes]
+        axs2 = [axs2]
 
-    for i, (layer_name, rec) in enumerate(snn.spk_rec.items()):
-        spikes = rec.permute(1, 0, 2)[0].cpu().numpy().T  # [N, T]
-        axes[i].imshow(spikes, aspect='auto', origin='lower', interpolation='none')
-        axes[i].set_ylabel(layer_name, rotation=0, labelpad=40)
-        axes[i].yaxis.set_label_position("right")
-        axes[i].grid(False)
+    for ax, layer_name in zip(axs2, layer_names):
+        rec = snn.spk_rec[layer_name]          # [T, B, F]
+        spikes = rec.permute(1,0,2)[0].cpu().numpy().T  # [F, T]
+        im = ax.imshow(spikes, aspect='auto', origin='lower', interpolation='none')
+        ax.set_ylabel(layer_name, rotation=0, labelpad=40)
+        ax.yaxis.set_label_position("right")
+        fig2.colorbar(im, ax=ax)
 
-    axes[-1].set_xlabel("Time step")
+    axs2[-1].set_xlabel("Time Step")
     plt.tight_layout()
-    plt.savefig(os.path.join(plot_dir, "spiking_activity_layers.png"))
-    plt.close()
+    fig2.savefig(os.path.join(plot_dir, "spiking_activity_layers.png"))
+    plt.close(fig2)

@@ -242,7 +242,7 @@ def get_network_dict(cfg):
             "layer_2": {
                 "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
                 "threshold": spike_threshold + 0.1, "learn_threshold": True, #phased_rate için 0.1, delta için 0
-                "reset_mechanism": "subtract", "bias": False
+                "reset_mechanism": "subtract", "bias": True
             }
         }
     elif model_type == "spiking-fsb-conv-noLif":
