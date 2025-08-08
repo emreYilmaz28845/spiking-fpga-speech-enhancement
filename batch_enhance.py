@@ -10,11 +10,11 @@ from itertools import chain
 
 # === Ayarlar ===
 noisy_dir = r"E:/VSProjects/datasets/audioVCTK/noisy"
-out_dir = r"E:/VSProjects/datasets/audioVCTK/enhanced-Spiker"
+out_dir = r"E:/VSProjects/datasets/audioVCTK/enhanced-spiking-fsb-conv"
 os.makedirs(out_dir, exist_ok=True)
 
 # === Model yükle ===
-model_path = "Trained/2025-06-04_01-18_phased_rate_e1_len10000/trained_state_dict.pt"
+model_path = "Trained/2025-08-01_12-52_phased_rate_e100_len4000_arch_spiking-fsb-conv/trained_state_dict.pt"
 snn = build_network(cfg)
 snn.load_state_dict(torch.load(model_path))
 snn.eval()

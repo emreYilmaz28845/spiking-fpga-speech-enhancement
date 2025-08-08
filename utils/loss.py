@@ -83,26 +83,60 @@ class SpikePositionLoss(nn.Module):
         return loss
 
 
+# class FilterLoss(nn.Module):
+#     def __init__(self, reduction: str = "mean"):
+#         super().__init__()
+#         self.reduction = reduction
+
+#     def forward(self,
+#                 predicted_mask: torch.Tensor,        # [B, T, F]
+#                 noisy_logstft: torch.Tensor,         # [B, T, F]
+#                 clean_logstft: torch.Tensor,         # [B, T, F]
+#                 mask: torch.Tensor = None            # [B, T] (optional)
+#                 ) -> torch.Tensor:
+        
+#         predicted_mask = predicted_mask.clamp(0.0, 1.0)
+#         denoised = predicted_mask * noisy_logstft  # [B, T, F]
+
+#         if mask is not None:
+#             mask_exp = mask.unsqueeze(-1).expand_as(denoised)  # [B, T, F]
+#             denoised = denoised[mask_exp == 1]
+#             clean_logstft = clean_logstft[mask_exp == 1]
+
+#         loss = F.mse_loss(denoised, clean_logstft, reduction=self.reduction)
+#         print(f"[FilterLoss] MSE Loss: {loss.item():.4f}")
+#         return loss
+    
+
 class FilterLoss(nn.Module):
-    def __init__(self, reduction: str = "mean"):
+    def __init__(self, reduction: str = "mean", lambda_noise: float = 0.0):
         super().__init__()
         self.reduction = reduction
+        self.lambda_noise = lambda_noise
 
     def forward(self,
-                predicted_mask: torch.Tensor,        # [B, T, F]
-                noisy_logstft: torch.Tensor,         # [B, T, F]
-                clean_logstft: torch.Tensor,         # [B, T, F]
-                mask: torch.Tensor = None            # [B, T] (optional)
+                predicted_mask: torch.Tensor,
+                noisy_logstft: torch.Tensor,
+                clean_logstft: torch.Tensor,
+                mask: torch.Tensor = None
                 ) -> torch.Tensor:
-        
+
         predicted_mask = predicted_mask.clamp(0.0, 1.0)
-        denoised = predicted_mask * noisy_logstft  # [B, T, F]
+        denoised = predicted_mask * noisy_logstft
 
         if mask is not None:
-            mask_exp = mask.unsqueeze(-1).expand_as(denoised)  # [B, T, F]
+            mask_exp = mask.unsqueeze(-1).expand_as(denoised)
             denoised = denoised[mask_exp == 1]
             clean_logstft = clean_logstft[mask_exp == 1]
+            noisy_logstft = noisy_logstft[mask_exp == 1]
 
-        loss = F.mse_loss(denoised, clean_logstft, reduction=self.reduction)
-        print(f"[FilterLoss] MSE Loss: {loss.item():.4f}")
-        return loss
+        clean_loss = F.mse_loss(denoised, clean_logstft, reduction=self.reduction)
+
+        # Penalize if denoised signal still contains noise
+        noise_residual = noisy_logstft - denoised
+        true_noise = noisy_logstft - clean_logstft
+        noise_loss = F.mse_loss(noise_residual, true_noise, reduction=self.reduction)
+
+        total_loss = clean_loss + self.lambda_noise * noise_loss
+        print(f"[FilterLoss] Clean Loss: {clean_loss.item():.4f} | Noise Loss: {noise_loss.item():.4f} | Total: {total_loss.item():.4f}")
+        return total_loss

@@ -9,13 +9,22 @@ from utils.config import cfg
 from utils.plot_utils import plot_stft_comparison
 
 # 1) load model
-path = "Trained/2025-07-24_19-53_phased_rate_e5_len4000_arch_spiking-fsb-conv/trained_state_dict.pt"
+#path = "Trained/2025-07-31_06-05_phased_rate_e80_len4000_arch_spiking-fsb-conv/trained_state_dict.pt"
+path = "Trained/2025-06-03_09-27_phased_rate_e10_len10000/trained_state_dict.pt"
+
+state_dict = torch.load(path)
+print(state_dict.keys())
+
 snn = build_network(cfg)
 snn.load_state_dict(torch.load(path))
+total_params = sum(p.numel() for p in snn.parameters())
+print(f"Toplam parametre sayısı: {total_params:,}")
 snn.eval()
-
+model_dir = os.path.dirname(path)  # Trained/2025-07-30_09-05_phased_rate_e60_len4000_arch_spiking-fsb-conv
+out_folder = os.path.join("outputs", os.path.basename(model_dir))
+print (out_folder)
 # 2) get one batch
-_, val_loader = get_dataloaders(cfg)
+train_loader, val_loader = get_dataloaders(cfg, shuffle=False)  # Sabit bölme için shuffle=False
 (input_spikes,
  target_spikes,
  clean_logstft,
@@ -23,7 +32,7 @@ _, val_loader = get_dataloaders(cfg)
  log_min,
  log_max,
  original_length,
- mask) = next(iter(val_loader))
+ mask) = next(iter(train_loader))
 
 # [T, B, F] for inference
 input_spikes = input_spikes.permute(1, 0, 2)
@@ -68,8 +77,7 @@ with torch.no_grad():
 # build output folder
 timestamp  = datetime.now().strftime("%Y-%m-%d_%H-%M")
 suffix     = "masked" if cfg.predict_filter else "STFT"
-out_folder = os.path.join("outputs", "wavs",
-                          f"{timestamp}_{cfg.encode_mode}_len{cfg.max_len}_{suffix}")
+out_folder = os.path.join(out_folder)
 os.makedirs(out_folder, exist_ok=True)
 
 # write WAVs

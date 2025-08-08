@@ -41,38 +41,43 @@ def get_network_dict(cfg):
         return {
             "n_cycles": example_input.shape[0],
             "n_inputs": example_input.shape[1],
-            "layer_0": {
-                "neuron_model": "syn", "n_neurons": 256,
-                "alpha": 0.05, "learn_alpha": False,
-                "beta": 0.05, "learn_beta": False,
-                "threshold": spike_threshold + 0.6, "learn_threshold": False,
-                "reset_mechanism": "zero"
-            },
-            "layer_1": {
-                "neuron_model": "rsyn", "n_neurons": 128,
-                "alpha": 0.07, "learn_alpha": False,
-                "beta": 0.07, "learn_beta": False,
-                "threshold": spike_threshold + 0.1, "learn_threshold": False,
-                "reset_mechanism": "zero", "bias": True
-            },
-            "layer_2": {
-                "neuron_model": "rif", "n_neurons": 64,
-                "beta": 0.4, "learn_beta": True,
-                "threshold": spike_threshold + 0.05, "learn_threshold": True,
-                "reset_mechanism": "zero", "bias": True
-            },
-            "layer_3": {
-                "neuron_model": "if", "n_neurons": 128,
-                "alpha": 0.1, "learn_alpha": True,
-                "beta": 0.6, "learn_beta": True,
-                "threshold": spike_threshold, "learn_threshold": True,
-                "reset_mechanism": "subtract", "bias": True
-            },
-            "layer_4": {
-                "neuron_model": "if", "n_neurons": cfg.n_freq_bins,
-                "threshold": spike_threshold * 0.3, "learn_threshold": False,
-                "reset_mechanism": "zero", "bias": False
-            },
+            "layer_0": { "neuron_model": "syn",
+                        "n_neurons": 256,
+                        "alpha": 0.05,  "learn_alpha": False,
+                        "beta":  0.05,  "learn_beta" : False,
+                        "threshold": spike_threshold+0.4, "learn_threshold": False,
+                        "reset_mechanism": "zero" },
+
+            # 128 ➜ 256   RSyn (context memory ~50 ms)
+            "layer_1": { "neuron_model": "rsyn",
+                        "n_neurons": 256,
+                        "alpha": 0.07,  "learn_alpha": False,
+                        "beta" : 0.07,  "learn_beta" : False,
+                        "threshold": spike_threshold+0.1, "learn_threshold": False,
+                        "reset_mechanism": "zero", "bias": True },
+
+            # -----------------  BOTTLENECK  ----------------------------------
+            # 256 ➜  64   RIF (sparse latent speech code)
+            "layer_2": { "neuron_model": "rif",
+                        "n_neurons": 64,
+                        "beta" : 0.15,  "learn_beta": False,  # RIF has no leak
+                        "threshold": spike_threshold+0.1, "learn_threshold": False,
+                        "reset_mechanism": "zero", "bias": True },
+
+            # -----------------  DECODER  -------------------------------------
+            # 64 (+ skip 128) ➜ 128   Syn (reconstruct)
+            "layer_3": { "neuron_model": "syn",
+                        "n_neurons": 128,
+                        "alpha": 0.1,  "learn_alpha": False,
+                        "beta" : 0.3,  "learn_beta" : False,
+                        "threshold": spike_threshold, "learn_threshold": False,
+                        "reset_mechanism": "subtract", "bias": True }, #can be use subtract?
+
+            # 128 ➜ 128  IF  (spike read-out)
+            "layer_4": { "neuron_model": "if",
+                        "n_neurons": 257,
+                        "threshold": spike_threshold*0.3, "learn_threshold": False,
+                        "reset_mechanism": "zero", "bias": False }
         }
 
     elif model_type == "autoencoder":
@@ -245,6 +250,27 @@ def get_network_dict(cfg):
                 "reset_mechanism": "subtract", "bias": True
             }
         }
+    elif model_type == "spiking-fsb-conv-light":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold + 0.2,  #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_2": {
+                "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
+                "threshold": spike_threshold + 0.1, "learn_threshold": True, #phased_rate için 0.1, delta için 0
+                "reset_mechanism": "subtract", "bias": True
+            }
+        }
     elif model_type == "spiking-fsb-conv-filter-predict":
         return {
             "n_cycles": example_input.shape[0],
@@ -256,7 +282,7 @@ def get_network_dict(cfg):
                 "learn_alpha": True,                 
                 "beta": 0.05,                         
                 "learn_beta": True,                  
-                "threshold": spike_threshold + 0.3,  #phased_rate için 0.5, delta için 0.1
+                "threshold": spike_threshold + 0.5,  #phased_rate için 0.5, delta için 0.1
                 "learn_threshold": True,
                 "reset_mechanism": "subtract"        
             },
@@ -267,14 +293,41 @@ def get_network_dict(cfg):
                 "learn_alpha": True,                 
                 "beta": 0.05,                         
                 "learn_beta": True,                  
-                "threshold": spike_threshold + 0.3, #phased_rate için 0.5, delta için 0.1
+                "threshold": spike_threshold +0.5, #phased_rate için 0.5, delta için 0.1
                 "learn_threshold": True,
                 "reset_mechanism": "subtract"        
             },
             "layer_2": {
                 "neuron_model": "lif", "n_neurons": cfg.n_freq_bins,
-                "threshold": spike_threshold + 0.2, "learn_threshold": True, #phased_rate için 0.1, delta için 0
+                "threshold": spike_threshold + 0.4, "learn_threshold": True, #phased_rate için 0.1, delta için 0
                 "reset_mechanism": "subtract", "bias": True
+            }
+        }
+    elif model_type == "spiking-fsb-conv-filter-predict-noLif":
+        return {
+            "n_cycles": example_input.shape[0],
+            "n_inputs": example_input.shape[1],
+            "layer_0": {
+                "neuron_model": "rsyn",               
+                "n_neurons": 256,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold +0.5,  #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
+            },
+            "layer_1": {
+                "neuron_model": "rsyn",               
+                "n_neurons": cfg.n_freq_bins,
+                "alpha": 0.05,                        
+                "learn_alpha": True,                 
+                "beta": 0.05,                         
+                "learn_beta": True,                  
+                "threshold": spike_threshold +0.5, #phased_rate için 0.5, delta için 0.1
+                "learn_threshold": True,
+                "reset_mechanism": "subtract"        
             }
         }
     elif model_type == "spiking-fsb-conv-noLif":

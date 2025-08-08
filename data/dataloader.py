@@ -47,6 +47,28 @@ def get_validation_sample(cfg):
         "log_max": sample_batch[5][0].item()
     }
 
+def get_sample(cfg):
+    from data.dataloader import SpikeSpeechEnhancementDataset
+    import torch
+
+    dataset = SpikeSpeechEnhancementDataset(
+        noisy_dir=f"{cfg.data_root}/noisy",
+        clean_dir=f"{cfg.data_root}/clean",
+        sample_rate=cfg.sample_rate,
+        n_fft=cfg.n_fft,
+        hop_length=cfg.hop_length,
+        max_len=cfg.max_len,
+        threshold=cfg.threshold,
+        normalize=cfg.normalize,
+        mode=cfg.encode_mode,
+        padding=cfg.padding,
+    )
+
+    sample = dataset[0]
+
+    return sample
+
+
 
 from torch.utils.data import Dataset
 import torch
